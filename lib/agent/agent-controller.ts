@@ -1,3 +1,22 @@
+/**
+ * @file Multi-Step Governed Agent Workflow Controller
+ * @module lib/agent/agent-controller
+ * @description
+ * Orchestrates the full lifecycle of an executive question from natural language parsing
+ * to verified database result synthesis, dynamic chart specification generation, and compliance auditing.
+ *
+ * Guaranteed Multi-Step Execution Pipeline:
+ * 1. Intent Extraction & Synonym Mapping (LLM / Rule-based)
+ * 2. Semantic Registry Metadata Lookup (Locking official formulas)
+ * 3. SemanticQuery AST Construction
+ * 4. Pre-Flight Governance Validation (Watchdog budget & allowlists)
+ * 5. Primary Governed Warehouse Execution
+ * 6. Automated Root Cause & Secondary Diagnostic Breakdown (if variance is detected)
+ * 7. Executive Synthesis (Anchored strictly to database rows)
+ * 8. Dynamic Chart Specification Generation (Recharts specs)
+ * 9. Server-Side Compliance Audit Trail Recording
+ */
+
 import {
   AgentState,
   AgentStep,
@@ -14,9 +33,22 @@ import { rootCauseAnalyzer } from "./root-cause-analyzer";
 import { responseSynthesizer } from "./response-synthesizer";
 import { visualizerEngine } from "@/lib/visualization/visualizer";
 
+/**
+ * Progress callback invoked after each reasoning milestone to update UI state in real-time.
+ */
 export type AgentStepCallback = (step: AgentStep, currentState: AgentState) => void;
 
+/**
+ * Main Controller coordinating multi-step agent reasoning without direct SQL generation.
+ */
 export class AgentController {
+  /**
+   * Executes the full governed analytical reasoning pipeline for a user question.
+   *
+   * @param question Natural language business query (e.g., 'Why did our European margins drop last quarter?')
+   * @param onStepUpdate Optional real-time step streaming callback for interactive UIs
+   * @returns Complete AgentState object containing data, synthesis, charts, and lineage metadata
+   */
   public async executeWorkflow(
     question: string,
     onStepUpdate?: AgentStepCallback
@@ -29,6 +61,9 @@ export class AgentController {
       steps,
     };
 
+    /**
+     * Helper to append or mutate workflow milestone steps.
+     */
     const recordStep = (
       id: string,
       stepName: string,
@@ -58,10 +93,10 @@ export class AgentController {
 
     try {
       // ----------------------------------------------------
-      // STEP 1: Intent Extraction
+      // STEP 1: Intent Extraction & Synonym Mapping
       // ----------------------------------------------------
       recordStep("step-1", "intent_extraction", "Understanding question & business intent", "running");
-      await new Promise((r) => setTimeout(r, 120)); // Brief UX cadence
+      await new Promise((r) => setTimeout(r, 120)); // Brief UX pacing
 
       const intent = mockLLMProvider.extractIntent(question);
       state.intent = intent;
@@ -77,7 +112,7 @@ export class AgentController {
       );
 
       // ----------------------------------------------------
-      // STEP 2: Semantic Metadata Retrieval
+      // STEP 2: Semantic Metadata Retrieval & Formula Locking
       // ----------------------------------------------------
       recordStep(
         "step-2",
@@ -130,7 +165,7 @@ export class AgentController {
       );
 
       // ----------------------------------------------------
-      // STEP 3: Query Planning & Construction
+      // STEP 3: Query AST Planning & Construction
       // ----------------------------------------------------
       recordStep("step-3", "query_planning", "Building structured semantic query", "running");
       await new Promise((r) => setTimeout(r, 100));
@@ -154,7 +189,7 @@ export class AgentController {
       );
 
       // ----------------------------------------------------
-      // STEP 4: Governance Validation
+      // STEP 4: Governance Watchdog & Policy Validation
       // ----------------------------------------------------
       recordStep("step-4", "governance", "Validating query against governance policies", "running");
       await new Promise((r) => setTimeout(r, 100));
@@ -193,7 +228,7 @@ export class AgentController {
       );
 
       // ----------------------------------------------------
-      // STEP 5: Querying Semantic Layer / Warehouse
+      // STEP 5: Primary Governed Query Execution
       // ----------------------------------------------------
       recordStep(
         "step-5",
@@ -215,7 +250,7 @@ export class AgentController {
       );
 
       // ----------------------------------------------------
-      // STEP 6 & 7: Secondary Breakdown & Root Cause Analysis
+      // STEP 6: Automated Root Cause & Secondary Breakdown
       // ----------------------------------------------------
       let investigation;
       if (intent.isDiagnostic || question.toLowerCase().includes("why") || question.toLowerCase().includes("drop")) {
@@ -254,7 +289,7 @@ export class AgentController {
       }
 
       // ----------------------------------------------------
-      // STEP 8: Response Synthesis & KPI Generation
+      // STEP 7: Response Synthesis & KPI Generation
       // ----------------------------------------------------
       recordStep("step-7", "synthesis", "Synthesizing executive summary & KPIs", "running");
       await new Promise((r) => setTimeout(r, 120));
@@ -276,7 +311,7 @@ export class AgentController {
       );
 
       // ----------------------------------------------------
-      // STEP 9: Dynamic Visualization Generation
+      // STEP 8: Dynamic Visualization Specification Generation
       // ----------------------------------------------------
       recordStep("step-8", "visualization", "Generating interactive visualization", "running");
       await new Promise((r) => setTimeout(r, 100));
@@ -304,7 +339,7 @@ export class AgentController {
       );
 
       // ----------------------------------------------------
-      // STEP 10: Audit Log Recording
+      // STEP 9: Server-Side Governance Audit Logging
       // ----------------------------------------------------
       const auditRecord = auditService.record({
         timestamp: new Date().toISOString(),
@@ -346,4 +381,7 @@ export class AgentController {
   }
 }
 
+/**
+ * Singleton instance of the Governed Agent Controller.
+ */
 export const agentController = new AgentController();

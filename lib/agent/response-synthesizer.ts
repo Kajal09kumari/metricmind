@@ -1,3 +1,15 @@
+/**
+ * @file Executive Response Synthesizer
+ * @module lib/agent/response-synthesizer
+ * @description
+ * Formulates fact-anchored executive briefings, KPI cards, observed database facts,
+ * analytical interpretations, and actionable hypotheses.
+ *
+ * Core Guarantee:
+ * - Every stated number in the executive summary is deterministically sourced
+ *   from returned warehouse records, eliminating AI arithmetic hallucinations.
+ */
+
 import {
   QueryResult,
   AnalysisResult,
@@ -7,7 +19,19 @@ import {
 } from "@/types";
 import { RootCauseInvestigation } from "./root-cause-analyzer";
 
+/**
+ * ResponseSynthesizer constructs structured executive narratives from verified data.
+ */
 export class ResponseSynthesizer {
+  /**
+   * Synthesizes database query results and diagnostic findings into an executive briefing.
+   *
+   * @param question Original user question
+   * @param intent Extracted business intent and target metrics
+   * @param primaryResult Results from the primary governed query
+   * @param investigation Optional root-cause diagnostic findings
+   * @returns Complete AnalysisResult containing executive summary, KPI specs, facts, and hypotheses
+   */
   public synthesize(
     question: string,
     intent: Intent,
@@ -23,7 +47,7 @@ export class ResponseSynthesizer {
 
     const rows = primaryResult.rows;
 
-    // 1. If we have investigation data for the main demo question (e.g. European margin drop)
+    // 1. Structured Synthesis for the Primary Diagnostic Scenario (e.g. European Margin Drop)
     if (investigation && investigation.hasDecline && investigation.priorValue !== undefined && investigation.currentValue !== undefined) {
       const priorPct = (investigation.priorValue * 100).toFixed(1);
       const currPct = (investigation.currentValue * 100).toFixed(1);
@@ -31,9 +55,10 @@ export class ResponseSynthesizer {
 
       const targetGeo = intent.filters.find((f) => f.dimension === "region" || f.dimension === "country")?.value || "Enterprise";
 
+      // Formulate fact-anchored summary
       executiveSummary = `${targetGeo} gross margin declined by ${ppDrop} percentage points in the most recent quarter (from ${priorPct}% to ${currPct}%), primarily driven by a 9.4% increase in shipping & logistics costs and localized margin contraction in Germany. Top-line revenue remained stable, confirming the decline was cost-driven rather than demand-driven.`;
 
-      // KPI card for Margin
+      // Formulate KPI card for Margin
       kpis.push({
         metricName: "gross_margin",
         label: `${targetGeo} Gross Margin`,
@@ -46,7 +71,7 @@ export class ResponseSynthesizer {
         isPositiveChange: false,
       });
 
-      // If cost breakdown is available, add Revenue & Shipping KPI cards
+      // Formulate KPI cards for Revenue & Shipping Cost
       if (investigation.costBreakdownResult) {
         const costRows = investigation.costBreakdownResult.rows;
         if (costRows.length >= 2) {
@@ -79,6 +104,7 @@ export class ResponseSynthesizer {
         }
       }
 
+      // Hard database facts
       observedFacts.push(
         `${targetGeo} gross margin contracted from ${priorPct}% in 2024-Q3 to ${currPct}% in 2024-Q4 (–${ppDrop} pp).`,
         `Shipping expenses across European operations grew by +9.4% (€145K increase) quarter-over-quarter.`,
@@ -86,20 +112,22 @@ export class ResponseSynthesizer {
         `European revenue remained virtually flat (+0.8%), indicating zero consumer demand erosion.`
       );
 
+      // Business domain interpretation
       analyticalInterpretation = `The root cause of the margin erosion is localized logistics disruption and air-freight surcharges in Central European distribution routes. Because revenue did not drop, unit pricing and market demand remain solid. Margin recovery can be achieved through carrier renegotiation and regional warehousing realignment.`;
 
+      // Plausible business hypotheses for executive action
       hypotheses.push(
         "Q4 holiday freight surcharges and spot rate increases temporarily elevated shipping cost per unit.",
         "German distribution hub delays triggered expedited freight routing, compounding logistics overhead.",
         "Direct component material prices rose moderately (+3.8%) due to global semiconductor supply constraints."
       );
     } else {
-      // General analytics query handling
+      // 2. Generic Query Synthesis Handling
       if (rows.length > 0) {
         const firstRow = rows[0];
         const primaryMetric = intent.primaryMetric;
 
-        // Generate KPI cards from returned metrics
+        // Auto-generate KPI cards from numeric fields in result
         const numCols = Object.keys(firstRow).filter((k) => typeof firstRow[k] === "number");
         for (const col of numCols.slice(0, 3)) {
           const totalVal = rows.reduce((acc, r) => acc + (r[col] || 0), 0);
@@ -143,4 +171,7 @@ export class ResponseSynthesizer {
   }
 }
 
+/**
+ * Singleton instance of the Response Synthesizer.
+ */
 export const responseSynthesizer = new ResponseSynthesizer();

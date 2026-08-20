@@ -1,20 +1,50 @@
+/**
+ * @file Governed Query Compiler
+ * @module lib/semantic/compiler
+ * @description
+ * Deterministically compiles a high-level `SemanticQuery` Abstract Syntax Tree (AST)
+ * into a safe, parameterized SQL query with explicit column aliases, GROUP BY clauses,
+ * WHERE filtering, ORDER BY logic, and pagination limits.
+ *
+ * Core Security Guarantee:
+ * - Direct SQL injection is impossible because all user filters are parameterized (`?`).
+ * - No raw table mutations or unauthorized column references are permitted.
+ */
+
 import { SemanticQuery, SemanticFilter } from "@/types";
 import { semanticRegistry } from "./registry";
 
+/**
+ * Result of the semantic compilation pipeline.
+ */
 export interface CompiledQuery {
+  /** Parameterized SQL string */
   sql: string;
+  /** Positional bind parameters corresponding to `?` placeholders */
   params: (string | number | boolean)[];
+  /** List of canonical metrics included in the query */
   metrics: string[];
+  /** List of canonical dimensions included in the query */
   dimensions: string[];
 }
 
+/**
+ * QueryCompiler translates validated semantic ASTs into executable relational SQL queries.
+ */
 export class QueryCompiler {
+  /**
+   * Compiles a SemanticQuery into an optimized, parameterized SQL statement.
+   *
+   * @param query The validated SemanticQuery AST
+   * @returns CompiledQuery object containing SQL string and bind parameters
+   * @throws Error if any metric or dimension in the query is unknown in the registry
+   */
   public compile(query: SemanticQuery): CompiledQuery {
     const params: (string | number | boolean)[] = [];
     const selectItems: string[] = [];
     const groupByItems: string[] = [];
 
-    // 1. Dimensions in SELECT and GROUP BY
+    // 1. Compile requested Dimensions into SELECT items and GROUP BY items
     if (query.dimensions && query.dimensions.length > 0) {
       for (const dimName of query.dimensions) {
         const dimDef = semanticRegistry.getDimension(dimName);
@@ -25,7 +55,7 @@ export class QueryCompiler {
       }
     }
 
-    // 2. Metrics in SELECT
+    // 2. Compile locked Metric formulas into SELECT aggregation items
     for (const metricName of query.metrics) {
       const metricDef = semanticRegistry.getMetric(metricName);
       if (!metricDef) throw new Error(`Unknown metric: ${metricName}`);
@@ -33,10 +63,10 @@ export class QueryCompiler {
       selectItems.push(`${metricDef.sqlFormula} AS ${metricDef.name}`);
     }
 
-    // 3. FROM table
+    // 3. Resolve underlying physical table (single enterprise sales table in demo)
     const fromTable = "sales_orders";
 
-    // 4. WHERE clauses
+    // 4. Compile WHERE clauses from dimensional filters
     const whereClauses: string[] = [];
 
     if (query.filters && query.filters.length > 0) {
@@ -46,23 +76,26 @@ export class QueryCompiler {
       }
     }
 
-    // Time Range filter
+    // Compile optional temporal range filter
     if (query.timeRange) {
       const timeClause = this.compileTimeRange(query.timeRange, params);
       if (timeClause) whereClauses.push(timeClause);
     }
 
+    // Assemble base SELECT and FROM statement
     let sql = `SELECT\n  ${selectItems.join(",\n  ")}\nFROM ${fromTable}`;
 
+    // Append WHERE predicates if present
     if (whereClauses.length > 0) {
       sql += `\nWHERE\n  ${whereClauses.join(" AND\n  ")}`;
     }
 
+    // Append GROUP BY expressions if dimensional slicing is requested
     if (groupByItems.length > 0) {
       sql += `\nGROUP BY\n  ${groupByItems.join(", ")}`;
     }
 
-    // 5. ORDER BY
+    // 5. Append ORDER BY sorting logic
     if (query.orderBy && query.orderBy.length > 0) {
       const orderClauses = query.orderBy.map((o) => {
         const dimDef = semanticRegistry.getDimension(o.field);
@@ -71,7 +104,7 @@ export class QueryCompiler {
       });
       sql += `\nORDER BY\n  ${orderClauses.join(", ")}`;
     } else if (query.dimensions && query.dimensions.length > 0) {
-      // Default natural ordering: time dimensions first
+      // Default natural chronological ordering for time-series charts
       const timeDims = ["quarter", "year", "month", "date"];
       const matchedTimeDim = query.dimensions.find((d) => timeDims.includes(d));
       if (matchedTimeDim) {
@@ -80,7 +113,7 @@ export class QueryCompiler {
       }
     }
 
-    // 6. LIMIT
+    // 6. Enforce safety LIMIT to prevent memory overflow
     const limit = query.limit || 1000;
     sql += `\nLIMIT ${limit};`;
 
@@ -92,6 +125,13 @@ export class QueryCompiler {
     };
   }
 
+  /**
+   * Compiles an individual semantic filter into a parameterized SQL condition.
+   *
+   * @param filter The SemanticFilter criteria
+   * @param params Output array to push parameter bind values into
+   * @returns SQL WHERE condition string (e.g., 'region = ?')
+   */
   private compileFilter(
     filter: SemanticFilter,
     params: (string | number | boolean)[]
@@ -142,6 +182,13 @@ export class QueryCompiler {
     }
   }
 
+  /**
+   * Converts high-level time ranges into parameterized date or quarter predicates.
+   *
+   * @param timeRange Specified time range configuration
+   * @param params Output array for bind values
+   * @returns SQL time range predicate string or null
+   */
   private compileTimeRange(
     timeRange: NonNullable<SemanticQuery["timeRange"]>,
     params: (string | number | boolean)[]
@@ -174,4 +221,7 @@ export class QueryCompiler {
   }
 }
 
+/**
+ * Singleton instance of the Governed Query Compiler.
+ */
 export const queryCompiler = new QueryCompiler();

@@ -1,20 +1,53 @@
+/**
+ * @file Root Cause Diagnostic & Variance Breakdown Engine
+ * @module lib/agent/root-cause-analyzer
+ * @description
+ * Automatically detects metric deviations, margin compressions, or variance trends
+ * across chronological periods and triggers secondary diagnostic breakdowns into cost drivers,
+ * revenue drivers, and localized sub-geographies within governance limits.
+ */
+
 import { QueryResult, SemanticFilter, KeyDriver, SemanticQuery } from "@/types";
 import { AgentTools } from "./tools";
 
+/**
+ * Diagnostic results of a root cause investigation.
+ */
 export interface RootCauseInvestigation {
+  /** True if a statistically significant downward metric deviation was detected */
   hasDecline: boolean;
+  /** Baseline value from the preceding period */
   priorValue?: number;
+  /** Value from the current period under investigation */
   currentValue?: number;
+  /** Absolute delta difference (`currentValue - priorValue`) */
   deltaValue?: number;
+  /** Relative percentage delta */
   deltaPercent?: number;
+  /** Secondary query result breaking down revenue, total cost, shipping, and material cost */
   costBreakdownResult?: QueryResult;
+  /** Secondary query result breaking down margins across sub-countries/regions */
   countryBreakdownResult?: QueryResult;
+  /** Optional secondary query result breaking down product categories */
   categoryBreakdownResult?: QueryResult;
+  /** Identified key driver badges with quantified impact */
   keyDrivers: KeyDriver[];
+  /** Log of secondary diagnostic queries dispatched through the semantic layer */
   secondaryQueries: { breakdownType: string; query: SemanticQuery; result: QueryResult }[];
 }
 
+/**
+ * RootCauseAnalyzer evaluates quarterly time series and identifies primary variance drivers.
+ */
 export class RootCauseAnalyzer {
+  /**
+   * Conducts an automated root-cause investigation on the primary query result dataset.
+   *
+   * @param primaryResult Initial query result containing primary metric trend rows
+   * @param primaryMetric The canonical metric being analyzed (e.g., 'gross_margin')
+   * @param filters Active dimensional filters applied to the query (e.g., region = 'Europe')
+   * @returns Complete RootCauseInvestigation object with driver badges and secondary results
+   */
   public async investigate(
     primaryResult: QueryResult,
     primaryMetric: string,
@@ -24,7 +57,7 @@ export class RootCauseAnalyzer {
     const secondaryQueries: { breakdownType: string; query: SemanticQuery; result: QueryResult }[] = [];
     const keyDrivers: KeyDriver[] = [];
 
-    // Check if we have quarterly time series rows
+    // Check if we have at least 2 chronological quarterly time-series rows
     const isQuarterly = rows.length >= 2 && "quarter" in rows[0];
 
     if (!isQuarterly) {
@@ -35,7 +68,7 @@ export class RootCauseAnalyzer {
       };
     }
 
-    // Sort chronologically
+    // Sort rows chronologically (e.g., 2024-Q1 -> 2024-Q4)
     const sorted = [...rows].sort((a, b) => (a.quarter > b.quarter ? 1 : -1));
     const currentPeriodRow = sorted[sorted.length - 1];
     const priorPeriodRow = sorted[sorted.length - 2];
@@ -45,7 +78,7 @@ export class RootCauseAnalyzer {
     const deltaVal = currentVal - priorVal;
     const deltaPercent = priorVal !== 0 ? (deltaVal / priorVal) * 100 : 0;
 
-    // Check if margin or metric dropped (e.g. gross_margin dropped by > 1 percentage point)
+    // Detect if a notable decline occurred (margin drop > 1.5 pp or relative drop > 3.0%)
     const isMargin = primaryMetric === "gross_margin";
     const hasDecline = isMargin ? deltaVal < -0.015 : deltaPercent < -3.0;
 
@@ -54,8 +87,9 @@ export class RootCauseAnalyzer {
     let categoryBreakdownResult: QueryResult | undefined;
 
     if (hasDecline) {
+      // ----------------------------------------------------
       // 1. Cost & Revenue Component Breakdown Query
-      // Retrieve revenue, cost, shipping_cost, material_cost across quarters for the same filter
+      // ----------------------------------------------------
       const costQuery: SemanticQuery = {
         metrics: ["revenue", "cost", "shipping_cost", "material_cost", "gross_margin"],
         dimensions: ["quarter"],
@@ -69,7 +103,7 @@ export class RootCauseAnalyzer {
         result: costBreakdownResult,
       });
 
-      // Analyze cost drivers between prior and current quarter
+      // Quantify cost component delta contributions
       const costSorted = [...costBreakdownResult.rows].sort((a, b) => (a.quarter > b.quarter ? 1 : -1));
       const currCost = costSorted[costSorted.length - 1];
       const prevCost = costSorted[costSorted.length - 2];
@@ -84,6 +118,7 @@ export class RootCauseAnalyzer {
         const revenueDelta = currCost.revenue - prevCost.revenue;
         const revenuePct = prevCost.revenue > 0 ? (revenueDelta / prevCost.revenue) * 100 : 0;
 
+        // Flag shipping cost surge if it exceeded 5% growth
         if (shippingPct > 5.0) {
           keyDrivers.push({
             factor: "Shipping & Logistics Surge",
@@ -97,6 +132,7 @@ export class RootCauseAnalyzer {
           });
         }
 
+        // Flag material inflation if it exceeded 3% growth
         if (materialPct > 3.0) {
           keyDrivers.push({
             factor: "Material & Component Inflation",
@@ -110,6 +146,7 @@ export class RootCauseAnalyzer {
           });
         }
 
+        // Flag top-line demand resilience
         if (Math.abs(revenuePct) < 3.0) {
           keyDrivers.push({
             factor: "Revenue Resilience",
@@ -124,8 +161,9 @@ export class RootCauseAnalyzer {
         }
       }
 
-      // 2. Geographic / Country Breakdown Query
-      // Find which country drove the largest decline
+      // ----------------------------------------------------
+      // 2. Geographic / Sub-Country Margin Breakdown Query
+      // ----------------------------------------------------
       const countryQuery: SemanticQuery = {
         metrics: ["revenue", "cost", "gross_margin", "shipping_cost"],
         dimensions: ["country", "quarter"],
@@ -139,7 +177,7 @@ export class RootCauseAnalyzer {
         result: countryBreakdownResult,
       });
 
-      // Find worst performing country in current quarter vs prior
+      // Identify the country with the steepest localized margin drop
       const currentQuarter = currentPeriodRow.quarter;
       const priorQuarter = priorPeriodRow.quarter;
 
@@ -189,4 +227,7 @@ export class RootCauseAnalyzer {
   }
 }
 
+/**
+ * Singleton instance of the Root Cause Analyzer.
+ */
 export const rootCauseAnalyzer = new RootCauseAnalyzer();

@@ -1,3 +1,12 @@
+/**
+ * @file Enterprise Governance & Policy Engine
+ * @module lib/governance/engine
+ * @description
+ * Enforces organizational data governance policies, computational budget guardrails,
+ * cardinality limits, and metric allowlists. Acts as the gatekeeper preventing
+ * runaway AI agent reasoning loops, compute quota exhaustion, and unauthorized aggregations.
+ */
+
 import {
   SemanticQuery,
   GovernanceValidationResult,
@@ -7,13 +16,33 @@ import { DEFAULT_GOVERNANCE_LIMITS } from "./limits";
 import { semanticValidator } from "@/lib/semantic/validator";
 import { semanticRegistry } from "@/lib/semantic/registry";
 
+/**
+ * Enterprise Governance Engine enforcing strict query policies and runtime budgets.
+ */
 export class GovernanceEngine {
+  /** Configured runtime guardrail boundaries */
   private limits: GovernanceLimits;
 
+  /**
+   * Initializes the Governance Engine with enterprise limit policies.
+   * @param limits Optional custom limits; defaults to DEFAULT_GOVERNANCE_LIMITS
+   */
   constructor(limits: GovernanceLimits = DEFAULT_GOVERNANCE_LIMITS) {
     this.limits = limits;
   }
 
+  /**
+   * Validates a candidate semantic query against all active governance rules.
+   *
+   * Enforced Policies:
+   * 1. Schema integrity & Zod validation
+   * 2. Max breakdown dimension limits (prevents Cartesian explosion)
+   * 3. Max row count capping (protects bandwidth & client memory)
+   * 4. Metric-dimension compatibility allowlist checks
+   *
+   * @param query Candidate SemanticQuery AST
+   * @returns GovernanceValidationResult with validity flag, errors, warnings, and sanitized query
+   */
   public validateSemanticQuery(query: unknown): GovernanceValidationResult {
     // 1. Run Semantic Layer Schema and Definition Validation
     const validation = semanticValidator.validateQuery(query);
@@ -62,6 +91,13 @@ export class GovernanceEngine {
     };
   }
 
+  /**
+   * Evaluates the current agent execution budget to prevent runaway queries or unbounded reasoning loops.
+   *
+   * @param currentQueryCount Total warehouse queries executed so far in the current session
+   * @param currentStepCount Total agent reasoning steps executed so far
+   * @returns Allowed status and cancellation rationale if budget is exceeded
+   */
   public checkExecutionBudget(currentQueryCount: number, currentStepCount: number): {
     allowed: boolean;
     reason?: string;
@@ -83,9 +119,16 @@ export class GovernanceEngine {
     return { allowed: true };
   }
 
+  /**
+   * Retrieves a copy of the active governance limits.
+   * @returns Current GovernanceLimits object
+   */
   public getLimits(): GovernanceLimits {
     return { ...this.limits };
   }
 }
 
+/**
+ * Singleton instance of the Enterprise Governance Engine.
+ */
 export const governanceEngine = new GovernanceEngine();
