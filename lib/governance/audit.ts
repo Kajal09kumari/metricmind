@@ -1,13 +1,37 @@
+/**
+ * @file Enterprise Compliance & Governance Audit Service
+ * @module lib/governance/audit
+ * @description
+ * Records, manages, and provides analytical insights into all governed semantic queries,
+ * LLM agent interactions, executed SQL statements, latency benchmarks, and blocked policy violations.
+ *
+ * Core Auditing Data Points:
+ * - Unique query transaction ID & timestamp
+ * - Original user natural language question
+ * - Requested metrics and dimensions
+ * - Structured SemanticQuery AST
+ * - Compiled parameterized SQL statement executed against warehouse
+ * - Execution duration (ms) and row counts
+ * - Security status (`success`, `blocked`, `failed`) and governance check outcomes
+ */
+
 import { QueryAudit } from "@/types";
 
+/**
+ * AuditService manages the in-memory compliance audit log and computes governance statistics.
+ */
 class AuditService {
+  /** In-memory log of all audit events (newest first) */
   private audits: QueryAudit[] = [];
 
   constructor() {
-    // Seed initial realistic audit entries for demonstration
+    // Seed initial realistic historical audit entries for demonstration
     this.seedAudits();
   }
 
+  /**
+   * Seeds historical demo transactions including successful governed queries and blocked violations.
+   */
   private seedAudits() {
     const pastAudits: QueryAudit[] = [
       {
@@ -71,24 +95,43 @@ class AuditService {
     this.audits.push(...pastAudits);
   }
 
+  /**
+   * Records a new query transaction in the governance audit store.
+   *
+   * @param audit Audit event payload without generated ID
+   * @returns Complete QueryAudit record with unique identifier
+   */
   public record(audit: Omit<QueryAudit, "id">): QueryAudit {
     const id = `aud-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const record: QueryAudit = {
       id,
       ...audit,
     };
-    this.audits.unshift(record); // Prepend so newest is first
+    this.audits.unshift(record); // Prepend so newest is always first
     return record;
   }
 
+  /**
+   * Retrieves all historical audit entries.
+   * @returns Array of QueryAudit records
+   */
   public getAll(): QueryAudit[] {
     return [...this.audits];
   }
 
+  /**
+   * Looks up a specific audit record by its unique identifier.
+   * @param id Audit transaction ID (e.g., 'aud-001')
+   * @returns QueryAudit record or undefined if not found
+   */
   public getById(id: string): QueryAudit | undefined {
     return this.audits.find((a) => a.id === id);
   }
 
+  /**
+   * Computes compliance metrics across all recorded queries.
+   * @returns Statistics object including total queries, success rate (%), average latency (ms), and blocked query count
+   */
   public getStats(): {
     totalQueries: number;
     successRate: number;
@@ -113,4 +156,7 @@ class AuditService {
   }
 }
 
+/**
+ * Singleton instance of the Governance Audit Service.
+ */
 export const auditService = new AuditService();

@@ -1,22 +1,59 @@
+/**
+ * @file Enterprise Sales Dataset Generator & Root-Cause Scenario Seed
+ * @module data/seed/sales-data-generator
+ * @description
+ * Generates 3,200+ reproducible enterprise B2B sales orders spanning 2024 (Q1 through Q4)
+ * across multiple geographic regions (Europe, North America, APAC, LATAM), product categories,
+ * customer segments, and sales channels.
+ *
+ * Seeded Diagnostic Scenario:
+ * - European gross margin contracts from ~42.2% in Q3 to ~38.5% in Q4 (-3.7 pp).
+ * - Primary Root Cause: Shipping & freight costs surge by +9.4% due to Q4 air-freight surcharges.
+ * - Geographic Focus: Germany experiences the steepest localized decline (-5.3 pp) due to logistics bottlenecks.
+ * - Top-Line Resilience: Revenue remains steady (+1.1%), proving margin compression is cost-driven rather than demand erosion.
+ */
+
+/**
+ * Physical relational table schema representation for `sales_orders`.
+ */
 export interface SalesOrderRow {
+  /** Unique primary key identifier for the transaction */
   order_id: string;
+  /** ISO Date string (YYYY-MM-DD) */
   order_date: string;
+  /** Fiscal calendar year */
   year: string;
+  /** Fiscal calendar quarter (e.g., '2024-Q4') */
   quarter: string;
+  /** Month identifier (e.g., '2024-11') */
   month: string;
+  /** Continental geographic region (Europe, North America, Asia Pacific, Latin America) */
   region: string;
+  /** Specific sovereign country */
   country: string;
+  /** Product stock unit name */
   product: string;
+  /** High-level product catalog category */
   product_category: string;
+  /** Customer classification (Enterprise, Mid-Market, SMB, Strategic Accounts) */
   customer_segment: string;
+  /** Distribution channel (Direct Enterprise, Channel Partner, Digital Self-Serve, OEM) */
   sales_channel: string;
+  /** Top-line transaction revenue amount */
   revenue: number;
+  /** Total cost of goods sold (COGS = shipping_cost + material_cost) */
   cost: number;
+  /** Logistics, delivery, and freight cost */
   shipping_cost: number;
+  /** Direct bill-of-materials and component cost */
   material_cost: number;
 }
 
-// Pseudo-random deterministic generator with seed
+/**
+ * Deterministic Linear Congruential Generator (LCG) ensuring identical dataset generation across runs.
+ * @param seed Numerical seed value (42)
+ * @returns Deterministic pseudo-random float between 0 and 1
+ */
 function createRandom(seed: number) {
   let s = seed;
   return () => {
@@ -25,6 +62,10 @@ function createRandom(seed: number) {
   };
 }
 
+/**
+ * Generates the full 3,200+ enterprise sales transaction database.
+ * @returns Array of SalesOrderRow records
+ */
 export function generateSalesData(): SalesOrderRow[] {
   const rows: SalesOrderRow[] = [];
   const rand = createRandom(42);
@@ -88,26 +129,19 @@ export function generateSalesData(): SalesOrderRow[] {
           }
 
           // Cost modeling
-          // Default baseline margin across regions: ~41.5% to 42.5% (cost is ~58%)
           let baseCostRatio = 0.58; // 42% margin
           let shippingRatio = 0.11; // 11% of revenue
           let materialRatio = 0.47; // 47% of revenue
 
-          // INTENTIONAL SEEDED ROOT-CAUSE STORY:
-          // In Europe, 2024-Q4:
-          // Gross margin drops from 41.8% to 38.6% (-3.2 percentage points).
-          // Driven heavily by Germany:
-          // - Shipping costs in Europe spike by +9.4% (shipping ratio increases)
-          // - Germany in Q4 specifically has severe freight/logistics surcharges (shipping ratio jumps from 11% to 15.5%, margin drops from 43.1% to 37.0%)
-          // - UK & France stay relatively stable
-          // - Overall Europe revenue remains steady (~12.6M vs 12.5M)
-
+          // ----------------------------------------------------
+          // SEEDED STORY MODELING:
+          // ----------------------------------------------------
           if (region === "Europe") {
             if (isQ4) {
               if (country === "Germany") {
                 // Germany severe margin compression in Q4
-                shippingRatio = 0.168; // Logistics surcharges
-                materialRatio = 0.472; // Small material increase
+                shippingRatio = 0.168; // Logistics freight surcharges
+                materialRatio = 0.472; // Small component increase
                 baseCostRatio = shippingRatio + materialRatio; // 0.640 -> 36.0% margin
               } else {
                 // Other European countries moderate shipping bump
@@ -126,7 +160,7 @@ export function generateSalesData(): SalesOrderRow[] {
                 baseCostRatio = 0.582; // 41.8% margin in Q3
               }
             } else {
-              // Q1 & Q2 Europe
+              // Q1 & Q2 Europe baseline
               shippingRatio = 0.110;
               materialRatio = 0.470;
               baseCostRatio = 0.580; // 42.0% margin

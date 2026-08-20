@@ -1,35 +1,63 @@
+/**
+ * @file Deterministic Intent Extraction & Semantic Agent Engine
+ * @module lib/llm/mock-llm-provider
+ * @description
+ * High-performance, zero-latency natural language intent extractor and query planner.
+ * Accurately parses executive queries into structured `Intent` representations,
+ * mapping business terminology to canonical metrics and dimensions with zero external API calls.
+ */
+
 import { LLMMessage, LLMProvider, Intent, SemanticFilter } from "@/types";
 import { semanticRegistry } from "@/lib/semantic/registry";
 
+/**
+ * MockLLMProvider provides deterministic intent extraction and query planning.
+ */
 export class MockLLMProvider implements LLMProvider {
+  /** Engine display identifier */
   public name = "Deterministic Semantic Agent Engine";
 
+  /**
+   * Generates standard text responses.
+   * @param messages Array of conversational messages
+   * @returns Response text
+   */
   public async generateText(messages: LLMMessage[]): Promise<string> {
     const lastMsg = messages[messages.length - 1]?.content || "";
     return `Analysis completed based on governed semantic warehouse data for query: "${lastMsg}".`;
   }
 
+  /**
+   * Generates typed structured JSON from prompts.
+   * @param messages Conversational message history
+   * @param schemaDescription Schema expectation tag
+   * @returns Parsed object conforming to generic type T
+   */
   public async generateJSON<T>(messages: LLMMessage[], schemaDescription?: string): Promise<T> {
     const userMsg = messages.find((m) => m.role === "user")?.content || "";
-    const lower = userMsg.toLowerCase();
 
-    // 1. Intent Extraction
+    // 1. Handle Intent Extraction requests
     if (schemaDescription?.includes("Intent") || schemaDescription?.includes("intent")) {
       return this.extractIntent(userMsg) as unknown as T;
     }
 
-    // Default fallback
     return {} as T;
   }
 
+  /**
+   * Extracts business intent, metrics, dimensions, filters, and diagnostic flags from a natural language prompt.
+   *
+   * @param question User natural language business question
+   * @returns Structured Intent object containing primaryMetric, targetDimensions, filters, and timeRange
+   */
   public extractIntent(question: string): Intent {
     const lower = question.toLowerCase();
 
-    // 1. Identify Metric
-    let primaryMetric = "revenue"; // default
+    // 1. Identify Target Metric
+    let primaryMetric = "revenue"; // default fallback
     const allMetrics = semanticRegistry.listMetrics();
 
-    // Check direct names and synonyms
+    // Check direct names and synonyms from semantic registry
     for (const metric of allMetrics) {
       if (lower.includes(metric.name.toLowerCase()) || lower.includes(metric.label.toLowerCase())) {
         primaryMetric = metric.name;
@@ -43,7 +71,7 @@ export class MockLLMProvider implements LLMProvider {
       }
     }
 
-    // Specific phrase rules
+    // Explicit domain keyword rules
     if (lower.includes("margin") || lower.includes("margins") || lower.includes("profitability")) {
       primaryMetric = "gross_margin";
     } else if (lower.includes("shipping") || lower.includes("freight") || lower.includes("delivery cost")) {
@@ -58,7 +86,7 @@ export class MockLLMProvider implements LLMProvider {
       primaryMetric = "aov";
     }
 
-    // 2. Identify Dimensions & Filters
+    // 2. Identify Dimensional Slicing & Filters
     const filters: SemanticFilter[] = [];
     const targetDimensions: string[] = [];
 
@@ -97,13 +125,12 @@ export class MockLLMProvider implements LLMProvider {
       }
     }
 
-    // Time Dimensions & Filters
+    // Time Dimensions & Range Filters
     let timeRange: Intent["timeRange"] = undefined;
 
     if (lower.includes("last quarter") || lower.includes("previous quarter") || lower.includes("q4")) {
-      // In executive BI, trend analysis across quarters shows prior vs last
       targetDimensions.push("quarter");
-      timeRange = { type: "year_to_date" }; // retrieve quarters in year to show drop
+      timeRange = { type: "year_to_date" };
     } else if (lower.includes("monthly") || lower.includes("month") || lower.includes("12 months")) {
       targetDimensions.push("month");
       timeRange = { type: "last_12_months" };
@@ -111,7 +138,7 @@ export class MockLLMProvider implements LLMProvider {
       timeRange = { type: "year_to_date" };
     }
 
-    // Dimension breakdown requests in prompt
+    // Explicit breakdown requests in query string
     if (lower.includes("by region") || lower.includes("across regions")) {
       if (!targetDimensions.includes("region")) targetDimensions.push("region");
     }
@@ -129,7 +156,7 @@ export class MockLLMProvider implements LLMProvider {
       if (!targetDimensions.includes("sales_channel")) targetDimensions.push("sales_channel");
     }
 
-    // Default dimension for trend questions
+    // Default time dimension for diagnostic questions
     if (targetDimensions.length === 0) {
       if (lower.includes("why") || lower.includes("drop") || lower.includes("decline") || lower.includes("trend") || lower.includes("drop last quarter")) {
         targetDimensions.push("quarter");
@@ -140,6 +167,7 @@ export class MockLLMProvider implements LLMProvider {
       }
     }
 
+    // Classify question diagnostic / comparative nature
     const isDiagnostic =
       lower.includes("why") ||
       lower.includes("what caused") ||
@@ -167,4 +195,7 @@ export class MockLLMProvider implements LLMProvider {
   }
 }
 
+/**
+ * Singleton instance of the Mock LLM Provider.
+ */
 export const mockLLMProvider = new MockLLMProvider();

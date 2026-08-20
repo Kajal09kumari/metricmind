@@ -1,3 +1,17 @@
+/**
+ * @file Dynamic Visualization & Recharts Specification Generator
+ * @module lib/visualization/visualizer
+ * @description
+ * Automatically determines the most effective chart type (Line, Bar, Area, Composite, KPI card, or Table)
+ * based on query dimensions, metric data types, and temporal vs categorical cardinality.
+ *
+ * Chart Selection Rules:
+ * 1. Single row with single metric -> KPI Card
+ * 2. Time-series dimension (`quarter`, `month`, `date`, `year`) -> Line / Area Chart
+ * 3. Categorical dimension (`region`, `country`, `product_category`) -> Bar Chart
+ * 4. Multi-dimensional / multi-metric dataset -> Interactive Data Table
+ */
+
 import {
   QueryResult,
   VisualizationSpec,
@@ -7,17 +21,29 @@ import {
 } from "@/types";
 import { semanticRegistry } from "@/lib/semantic/registry";
 
+/**
+ * VisualizerEngine produces strongly-typed chart specifications for frontend rendering.
+ */
 export class VisualizerEngine {
+  /** High-contrast, accessible color palette for multi-series charts */
   private colors = [
-    "#3B82F6", // blue-500
-    "#10B981", // emerald-500
-    "#F59E0B", // amber-500
-    "#8B5CF6", // purple-500
-    "#EC4899", // pink-500
-    "#06B6D4", // cyan-500
-    "#F97316", // orange-500
+    "#3B82F6", // Blue 500
+    "#10B981", // Emerald 500
+    "#F59E0B", // Amber 500
+    "#8B5CF6", // Purple 500
+    "#EC4899", // Pink 500
+    "#06B6D4", // Cyan 500
+    "#F97316", // Orange 500
   ];
 
+  /**
+   * Evaluates a QueryResult and generates an optimal visualization specification.
+   *
+   * @param queryResult Aggregated result rows from the governed semantic layer
+   * @param title Optional chart title
+   * @param forcedType Optional override to force a specific chart type
+   * @returns VisualizationSpec ready for dynamic UI rendering with Recharts
+   */
   public generateSpec(
     queryResult: QueryResult,
     title?: string,
@@ -32,6 +58,7 @@ export class VisualizerEngine {
       };
     }
 
+    // Partition result columns into metrics vs dimensions
     const metricCols = columns.filter((col) => {
       const metricDef = semanticRegistry.getMetric(col.name);
       return Boolean(metricDef);
@@ -42,12 +69,12 @@ export class VisualizerEngine {
       return Boolean(dimDef);
     });
 
-    // 1. If forced type is provided
+    // 1. If explicit chart type override is requested
     if (forcedType) {
       return this.buildSpecForType(forcedType, queryResult, title, metricCols, dimCols);
     }
 
-    // 2. Single row, single metric -> KPI
+    // 2. Single row, single metric -> KPI Card
     if (rows.length === 1 && dimCols.length === 0 && metricCols.length === 1) {
       const metricDef = semanticRegistry.getMetric(metricCols[0].name);
       return {
@@ -59,7 +86,7 @@ export class VisualizerEngine {
       };
     }
 
-    // 3. Time series (date, month, quarter, year) -> Line Chart or Area Chart
+    // 3. Time series dimension detected -> Interactive Line Chart
     const timeDims = ["quarter", "month", "date", "year"];
     const timeDim = dimCols.find((d) => timeDims.includes(d.name));
 
@@ -86,7 +113,7 @@ export class VisualizerEngine {
       };
     }
 
-    // 4. Categorical Breakdown (region, country, product_category, etc.) -> Bar Chart
+    // 4. Categorical dimension detected -> Interactive Bar Chart
     if (dimCols.length === 1 && metricCols.length > 0) {
       const dim = dimCols[0];
       const series: ChartSeries[] = metricCols.map((m, idx) => {
@@ -110,7 +137,7 @@ export class VisualizerEngine {
       };
     }
 
-    // 5. Default -> Table or Multi-series Bar
+    // 5. Default fallback -> Interactive Data Table
     return {
       type: "table",
       title: title || "Data Table",
@@ -118,6 +145,9 @@ export class VisualizerEngine {
     };
   }
 
+  /**
+   * Helper constructing a specification for an explicitly requested chart type.
+   */
   private buildSpecForType(
     type: ChartType,
     queryResult: QueryResult,
@@ -148,4 +178,7 @@ export class VisualizerEngine {
   }
 }
 
+/**
+ * Singleton instance of the Dynamic Visualizer Engine.
+ */
 export const visualizerEngine = new VisualizerEngine();
